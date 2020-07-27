@@ -1,74 +1,98 @@
-// usage: 
+// usage:
 //   $ root model.root
 //   root[ ] makemodel(w)
 //
 
-int makemodel(string filepath) 
+int makemodel(string filepath)
 {
-	// file containing templates
-	TFile* inputFile = new TFile(filepath.c_str());
+  // file containing templates
+  TFile* inputFile = new TFile(filepath.c_str());
 
-	// get templates from file
-	int NBinsNu = 10;
-	TH2F* hmu_sgn_templ[NBinsNu];
+  // get neutrino spectrum
+  TH1F* hnu_e;
+  inputFile->GetObject("hNuE", hnu_e);
 
-	for(auto t=0; t<NBinsNu; t++)
-		inputFile -> GetObject(Form("hMu_sgn_obs_nuBin%d", t+1), hmu_sgn_templ[t]);
+  int NBinsNu = hnu_e->GetNbinsX();
 
-	// define observables
-	RooRealVar evis{"evis", "visible energy", 0,	400, "MeV"};
-	RooRealVar z{"z", "Impact Position", 0, 4400, "cm"};
+  double tot_evts = hnu_e->Integral();
 
-	// define parameters 
-	RooRealVar f0{"f0", "f0",    0.0, 0., 1.};
-	RooRealVar f1{"f1", "f1", 0.0001, 0., 1.};
-	RooRealVar f2{"f2", "f2",  0.014, 0., 1.};
-	RooRealVar f3{"f3", "f3",    0.1, 0., 1.};
-	RooRealVar f4{"f4", "f4",   0.25, 0., 1.};
-	RooRealVar f5{"f5", "f5",    0.3, 0., 1.};
-	RooRealVar f6{"f6", "f6",   0.12, 0., 1.};
-	RooRealVar f7{"f7", "f7",   0.12, 0., 1.};
-	RooRealVar f8{"f8", "f8",  0.008, 0., 1.};
+  // get templates from file
 
-	// template RooDataHist: needed to build pdf
-	RooDataHist dhist00{"dh00", "dh00", RooArgSet{evis, z}, hmu_sgn_templ[0]};
-	RooDataHist dhist01{"dh01", "dh01", RooArgSet{evis, z}, hmu_sgn_templ[1]};
-	RooDataHist dhist02{"dh02", "dh02", RooArgSet{evis, z}, hmu_sgn_templ[2]};
-	RooDataHist dhist03{"dh03", "dh03", RooArgSet{evis, z}, hmu_sgn_templ[3]};
-	RooDataHist dhist04{"dh04", "dh04", RooArgSet{evis, z}, hmu_sgn_templ[4]};
-	RooDataHist dhist05{"dh05", "dh05", RooArgSet{evis, z}, hmu_sgn_templ[5]};
-	RooDataHist dhist06{"dh06", "dh06", RooArgSet{evis, z}, hmu_sgn_templ[6]};
-	RooDataHist dhist07{"dh07", "dh07", RooArgSet{evis, z}, hmu_sgn_templ[7]};
-	RooDataHist dhist08{"dh08", "dh08", RooArgSet{evis, z}, hmu_sgn_templ[8]};
-	RooDataHist dhist09{"dh09", "dh09", RooArgSet{evis, z}, hmu_sgn_templ[9]};
+  vector<TH2F*> hmu_sgn_templ;
 
-	// pdf of evis,z from histograms
-	RooHistPdf pdf00{"pdf00", "pdf00", RooArgSet{evis, z}, dhist00, 2};  
-	RooHistPdf pdf01{"pdf01", "pdf01", RooArgSet{evis, z}, dhist01, 2};
-	RooHistPdf pdf02{"pdf02", "pdf02", RooArgSet{evis, z}, dhist02, 2};  
-	RooHistPdf pdf03{"pdf03", "pdf03", RooArgSet{evis, z}, dhist03, 2};
-	RooHistPdf pdf04{"pdf04", "pdf04", RooArgSet{evis, z}, dhist04, 2};  
-	RooHistPdf pdf05{"pdf05", "pdf05", RooArgSet{evis, z}, dhist05, 2};
-	RooHistPdf pdf06{"pdf06", "pdf06", RooArgSet{evis, z}, dhist06, 2};  
-	RooHistPdf pdf07{"pdf07", "pdf07", RooArgSet{evis, z}, dhist07, 2};
-	RooHistPdf pdf08{"pdf08", "pdf08", RooArgSet{evis, z}, dhist08, 2};  
-	RooHistPdf pdf09{"pdf09", "pdf09", RooArgSet{evis, z}, dhist09, 2};  
+  for (auto t = 0; t < NBinsNu; t++) {
+    TH2F* h_temp;
+    inputFile->GetObject(Form("hMu_sgn_obs_nuBin%d", t + 1), h_temp);
 
-	RooArgSet pdfset{pdf00, pdf01, pdf02, pdf03, pdf04, pdf05, pdf06, pdf07, pdf08};
-	pdfset.add(pdf09);
+    if (h_temp->Integral() != 0) hmu_sgn_templ.push_back(h_temp);
+  }
 
-	RooArgSet parset{f0, f1, f2, f3, f4, f5, f6, f7, f8};
+  // total number of parameters: number of templates minus one
+  // since we are not considering the extended fit
+  int n_params = hmu_sgn_templ.size() - 1;
 
-	// define the model (not extended)
-	RooAddPdf model{"model", "model", pdfset, parset};
+  // check template validity and determine actual parameters for model
+  double integr(0);
+  vector<double> f_val;
+  for (auto t = 0; t < n_params; t++) {
+    integr = hmu_sgn_templ[t]->Integral();
 
-	// 
-	RooWorkspace w{"w", "w"};
-	w.import(model);
-	w.writeToFile("model.root");
+    f_val.push_back(integr / tot_evts);
+  }
 
-	return 0;
+  // save number of bins in variable
+  RooInt evis_bins(hmu_sgn_templ[0]->GetNbinsX());
+  evis_bins.SetName("evis_bins");
+
+  RooInt z_bins(hmu_sgn_templ[0]->GetNbinsY());
+  z_bins.SetName("z_bins");
+
+  // define observables
+  RooRealVar evis{"evis", "visible energy", 0, 400, "MeV"};
+  RooRealVar z{"z", "Impact Position", 0, 4400, "cm"};
+
+  // define parameters
+  RooRealVar* f[n_params];
+
+  for (auto p = 0; p < n_params; p++)
+    f[p] = new RooRealVar{Form("f%d", p), Form("f%d", p), f_val[p], 0., 1.};
+
+  // template RooDataHist: needed to build pdf
+  RooDataHist* dhist[n_params + 1];
+
+  for (auto p = 0; p < n_params + 1; p++)
+    dhist[p] = new RooDataHist{Form("dh%d", p), Form("dh%d", p),
+                               RooArgSet{evis, z}, hmu_sgn_templ[p]};
+
+  // pdf of evis,z from histograms
+  RooHistPdf* pdf[n_params + 1];
+
+  for (auto p = 0; p < n_params + 1; p++)
+    pdf[p] = new RooHistPdf{Form("pdf%d", p), Form("pdf%d", p),
+                            RooArgSet{evis, z}, *dhist[p], 2};
+
+  RooArgSet pdfset;
+  for (auto p = 0; p < n_params + 1; p++) pdfset.add(*pdf[p]);
+
+  RooArgSet parset;
+  for (auto p = 0; p < n_params; p++) parset.add(*f[p]);
+
+  // define the model (not extended)
+  RooAddPdf model{"model", "model", pdfset, parset};
+
+  //
+  RooWorkspace w{"w", "w"};
+  w.import(evis_bins);
+  w.import(z_bins);
+  w.import(model);
+  w.writeToFile("model.root");
+
+  for (auto p = 0; p < n_params + 1; p++) {
+    if (p < n_params) delete f[p];
+
+    delete dhist[p];
+    delete pdf[p];
+  }
+
+  return 0;
 }
-
-
-
