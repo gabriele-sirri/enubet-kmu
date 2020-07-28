@@ -3,6 +3,9 @@
 //   root[ ] testmodel(w)
 //
 
+TVectorD getTrueWeights(int n_par, double sigma, RooRealVar* f[],
+                        TMatrixDSym& cov_f);
+
 int testmodel(RooWorkspace& w)
 {
   gROOT->SetBatch(kTRUE);
@@ -30,52 +33,40 @@ int testmodel(RooWorkspace& w)
   for (auto p = 0; p < pdf_list.getSize(); p++)
     pdfset.add(*((RooHistPdf*) pdf_list.find(Form("pdf%d", p))));
 
-  // generate toy data
-  auto data =
-      model->generateBinned(RooArgSet{*evis, *z}, 160000, RooFit::Verbose(1));
-
   // get model parameters
   RooRealVar* f[n_params];
   for (auto p = 0; p < n_params; p++) f[p] = w.var(Form("f%d", p));
 
-  // simulate values for f covariance matrix
-  TMatrixDSym Vf(n_params);
-  for (auto i = 0; i < n_params; i++)
-    for (auto j = 0; j < n_params; j++) {
-      double fij = (f[i]->getValV()) * (f[j]->getValV());
-      if (i == j)
-        Vf(i, j) = 1.0 * fij;
-      else if (j == i + 1 || j == i - 1)
-        Vf(i, j) = 0.2 * fij;
-      else if (j == i + 2 || j == i - 2)
-        Vf(i, j) = 0.05 * fij;
-      else
-        Vf(i, j) = 0. * fij;
-    }
+  // copy initial parameters values: this will be used for initialization,
+  // they are the actual MC fractions
+  vector<double> vf_in;
+  for (auto p = 0; p < n_params; p++) vf_in.push_back(f[p]->getValV());
 
-  Vf.Print();
-
+  // simulate b coefficients (weights) covariance matrix (and corresponding f
+  // covariance matrix) and from this the actual b coefficients true value
   double sigma_b = 0.2;
-  Vf *= pow(sigma_b, 2);
+  TMatrixDSym Vf(n_params);
+  TVectorD b_coef = getTrueWeights(n_params, sigma_b, f, Vf);
 
-  // parameters mean values
-  RooConstVar* mu_f[n_params];
+  // print b coefficients true values
+  cout << " ========== b-coefficients true values =========" << endl;
   for (auto p = 0; p < n_params; p++)
-    mu_f[p] =
-        new RooConstVar{Form("mu_f%d", p), Form("mu_f%d", p), f[p]->getValV()};
+    cout << "b" << p << " = " << b_coef[p] << endl;
 
-  RooArgSet fset, mu_fset;
+  // set parameters value for toy data generation: weight the MC fractions with
+  // b_coef true values
+  cout << " ========== f fractions true values =========" << endl;
   for (auto p = 0; p < n_params; p++) {
-    fset.add(*f[p]);
-    mu_fset.add(*mu_f[p]);
+    f[p]->setVal(b_coef[p] * vf_in[p]);
+    cout << "f" << p << " = " << f[p]->getValV() << endl;
   }
 
-  // constraint on model parameters
-  RooMultiVarGaussian c_Vf("c_Vf", "c_Vf", fset, mu_fset, Vf);
+  // generate toy data
+  auto data =
+      model->generateBinned(RooArgSet{*evis, *z}, 160000, RooFit::Verbose(1));
 
-  // set initial values for parameters
-  for (auto p = 0; p < n_params; p++) f[p]->setVal(f[p]->getValV() * 0.9);
-  // f[p] -> setVal(0.3);
+  // set initial values for parameters to MC fraction: used to perform the fit
+  for (auto p = 0; p < n_params; p++) f[p]->setVal(vf_in[p]);
 
   // plot data and model overlaid before fitting
   //
@@ -110,6 +101,20 @@ int testmodel(RooWorkspace& w)
                   RooFit::LineStyle(kDotted), RooFit::FillColor(p + 40),
                   RooFit::DrawOption("F"), RooFit::MoveToBack());
   }
+
+  // parameters mean values: needed for constraint
+  RooConstVar* mu_f[n_params];
+  for (auto p = 0; p < n_params; p++)
+    mu_f[p] = new RooConstVar{Form("mu_f%d", p), Form("mu_f%d", p), vf_in[p]};
+
+  RooArgSet fset, mu_fset;
+  for (auto p = 0; p < n_params; p++) {
+    fset.add(*f[p]);
+    mu_fset.add(*mu_f[p]);
+  }
+
+  // constraint on model parameters
+  RooMultiVarGaussian c_Vf("c_Vf", "c_Vf", fset, mu_fset, Vf);
 
   // fit model to data
   auto fitresult = model->fitTo(*data, RooFit::ExternalConstraints(c_Vf),
@@ -230,4 +235,77 @@ int testmodel(RooWorkspace& w)
   }
 
   return 1;
+}
+
+TVectorD getTrueWeights(int n_par, double sigma, RooRealVar* f[],
+                        TMatrixDSym& cov_f)
+{
+  // simulate values for cov matrix
+  TMatrixDSym cov_b(n_par);
+  for (auto i = 0; i < n_par; i++)
+    for (auto j = 0; j < n_par; j++) {
+      if (i == j)
+        cov_b(i, j) = 1.0;
+      else if (j == i + 1 || j == i - 1)
+        cov_b(i, j) = 0.2;
+      else if (j == i + 2 || j == i - 2)
+        cov_b(i, j) = 0.05;
+      else
+        cov_b(i, j) = 0.;
+    }
+
+  for (auto i = 0; i < n_par; i++)
+    for (auto j = 0; j < n_par; j++) {
+      double fij = (f[i]->getValV()) * (f[j]->getValV());
+      if (i == j)
+        cov_f(i, j) = 1.0 * fij;
+      else if (j == i + 1 || j == i - 1)
+        cov_f(i, j) = 0.2 * fij;
+      else if (j == i + 2 || j == i - 2)
+        cov_f(i, j) = 0.05 * fij;
+      else
+        cov_f(i, j) = 0. * fij;
+    }
+
+  cov_f *= pow(sigma, 2);
+
+  // Simulate observed data: to do this, simulate a given vaalue for the vector
+  // of normalization coefficients b taking into account the flux correlation
+  // matrix. Use these values to normalize the templates and sum them to obtain
+  // total spetra for the observables:
+  //
+  // let's assume we have the above correlation matrix: starting from
+  // uncorrelated values of the normalization coefficients b of the bins in the
+  // neutrino energy spectrum, we can obtain correlated ones by applying the
+  // change of coordinates matrix obtained from the Cholesky decomposition.
+  //
+  // Cholesky decomposition of covariance flux matrix (NOTE: actually this is
+  // the matrix divided by sigma^2)
+  TDecompChol* ch = new TDecompChol(cov_b);
+  bool ret = ch->Decompose();
+
+  TMatrixD* U = new TMatrixD(n_par, n_par);
+  *U = ch->GetU();
+
+  // weights
+  double w[n_par];
+
+  TRandom* rnd = new TRandom(0);
+  for (int bn = 0; bn < n_par; bn++) w[bn] = rnd->Gaus(0, sigma);
+
+  TVectorD wDec(0, n_par - 1, w);
+  // The vector of correlated coefficient to be used to simulate data
+  TVectorD wCor = *U * wDec;
+
+  wCor += 1.;
+
+  cov_b *= pow(sigma, 2);
+
+  cov_b.Print();
+
+  delete ch;
+  delete U;
+  delete rnd;
+
+  return wCor;
 }
