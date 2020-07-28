@@ -23,6 +23,9 @@ int testmodel(RooWorkspace& w)
   // list of model pdfs: useful for drawing
   auto pdf_list = model->pdfList();
 
+  auto n_pdf = pdf_list.getSize();
+  auto n_params = n_pdf - 1;
+
   RooArgSet pdfset;
   for (auto p = 0; p < pdf_list.getSize(); p++)
     pdfset.add(*((RooHistPdf*) pdf_list.find(Form("pdf%d", p))));
@@ -30,6 +33,49 @@ int testmodel(RooWorkspace& w)
   // generate toy data
   auto data =
       model->generateBinned(RooArgSet{*evis, *z}, 160000, RooFit::Verbose(1));
+
+  // get model parameters
+  RooRealVar* f[n_params];
+  for (auto p = 0; p < n_params; p++) f[p] = w.var(Form("f%d", p));
+
+  // simulate values for f covariance matrix
+  TMatrixDSym Vf(n_params);
+  for (auto i = 0; i < n_params; i++)
+    for (auto j = 0; j < n_params; j++) {
+      double fij = (f[i]->getValV()) * (f[j]->getValV());
+      if (i == j)
+        Vf(i, j) = 1.0 * fij;
+      else if (j == i + 1 || j == i - 1)
+        Vf(i, j) = 0.2 * fij;
+      else if (j == i + 2 || j == i - 2)
+        Vf(i, j) = 0.05 * fij;
+      else
+        Vf(i, j) = 0. * fij;
+    }
+
+  Vf.Print();
+
+  double sigma_b = 0.2;
+  Vf *= pow(sigma_b, 2);
+
+  // parameters mean values
+  RooConstVar* mu_f[n_params];
+  for (auto p = 0; p < n_params; p++)
+    mu_f[p] =
+        new RooConstVar{Form("mu_f%d", p), Form("mu_f%d", p), f[p]->getValV()};
+
+  RooArgSet fset, mu_fset;
+  for (auto p = 0; p < n_params; p++) {
+    fset.add(*f[p]);
+    mu_fset.add(*mu_f[p]);
+  }
+
+  // constraint on model parameters
+  RooMultiVarGaussian c_Vf("c_Vf", "c_Vf", fset, mu_fset, Vf);
+
+  // set initial values for parameters
+  for (auto p = 0; p < n_params; p++) f[p]->setVal(f[p]->getValV() * 0.9);
+  // f[p] -> setVal(0.3);
 
   // plot data and model overlaid before fitting
   //
@@ -41,7 +87,7 @@ int testmodel(RooWorkspace& w)
   model->plotOn(evis_frame_pref);
 
   RooArgSet pdf_set;
-  for (auto p = 0; p < pdf_list.getSize(); p++) {
+  for (auto p = 0; p < n_pdf; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(evis_frame_pref, RooFit::Components(pdf_set),
@@ -57,7 +103,7 @@ int testmodel(RooWorkspace& w)
   model->plotOn(z_frame_pref);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < pdf_list.getSize(); p++) {
+  for (auto p = 0; p < n_pdf; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(z_frame_pref, RooFit::Components(pdf_set),
@@ -66,7 +112,8 @@ int testmodel(RooWorkspace& w)
   }
 
   // fit model to data
-  auto fitresult = model->fitTo(*data, RooFit::Save(), RooFit::PrintLevel(3));
+  auto fitresult = model->fitTo(*data, RooFit::ExternalConstraints(c_Vf),
+                                RooFit::Save(), RooFit::PrintLevel(3));
 
   // display results
   fitresult->Print();
@@ -81,7 +128,7 @@ int testmodel(RooWorkspace& w)
   model->plotOn(evis_frame_postf);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < pdf_list.getSize(); p++) {
+  for (auto p = 0; p < n_pdf; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(evis_frame_postf, RooFit::Components(pdf_set),
@@ -97,7 +144,7 @@ int testmodel(RooWorkspace& w)
   model->plotOn(z_frame_postf);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < pdf_list.getSize(); p++) {
+  for (auto p = 0; p < n_pdf; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(z_frame_postf, RooFit::Components(pdf_set),
@@ -145,10 +192,6 @@ int testmodel(RooWorkspace& w)
 
   // Plot likelihood profiles
   //
-  // list of normalization coefficients
-  RooRealVar* f[pdf_list.getSize() - 1];
-  for (auto p = 0; p < pdf_list.getSize() - 1; p++)
-    f[p] = w.var(Form("f%d", p));
 
   // Construct likelihood
   //
@@ -157,7 +200,7 @@ int testmodel(RooWorkspace& w)
   RooAbsReal* nll = model->createNLL(*data, RooFit::NumCPU(2));
 
   // Construct profile likelihood for the parameters
-  for (auto p = 0; p < pdf_list.getSize() - 1; p++) {
+  for (auto p = 0; p < n_params; p++) {
     // set appropriate range to scan
     RooRealVar* par =
         (RooRealVar*) (fitresult->floatParsFinal()).find(Form("f%d", p));
@@ -182,6 +225,8 @@ int testmodel(RooWorkspace& w)
     frame->Draw();
 
     c_pll->SaveAs(Form("plots/pll_par_f%d.pdf", p));
+
+    delete c_pll;
   }
 
   return 1;
