@@ -17,7 +17,8 @@ int makemodel(string filepath)
   double tot_evts = hnu_e->Integral();
 
   // get templates from file
-
+  //
+  // signal
   vector<TH2F*> hmu_sgn_templ;
 
   for (auto t = 0; t < NBinsNu; t++) {
@@ -27,9 +28,16 @@ int makemodel(string filepath)
     if (h_temp->Integral() != 0) hmu_sgn_templ.push_back(h_temp);
   }
 
+  // background
+  TH2F* hmu_bkg_templ;
+  inputFile->GetObject("hMu_bkg_obs", hmu_bkg_templ);
+
+  // must add bkg events to tot number of events
+  tot_evts += hmu_bkg_templ->Integral();
+
   // total number of parameters: number of templates minus one
   // since we are not considering the extended fit
-  int n_params = hmu_sgn_templ.size() - 1;
+  int n_params = hmu_sgn_templ.size();
 
   // check template validity and determine actual parameters for model
   double integr(0);
@@ -39,6 +47,9 @@ int makemodel(string filepath)
 
     f_val.push_back(integr / tot_evts);
   }
+
+  integr = hmu_bkg_templ->Integral();
+  f_val.push_back(integr / tot_evts);
 
   // save number of bins in variable
   RooInt evis_bins(hmu_sgn_templ[0]->GetNbinsX());
@@ -60,9 +71,14 @@ int makemodel(string filepath)
   // template RooDataHist: needed to build pdf
   RooDataHist* dhist[n_params + 1];
 
-  for (auto p = 0; p < n_params + 1; p++)
-    dhist[p] = new RooDataHist{Form("dh%d", p), Form("dh%d", p),
-                               RooArgSet{evis, z}, hmu_sgn_templ[p]};
+  for (auto p = 0; p < n_params + 1; p++) {
+    if (p < n_params)
+      dhist[p] = new RooDataHist{Form("dh%d", p), Form("dh%d", p),
+                                 RooArgSet{evis, z}, hmu_sgn_templ[p]};
+    else
+      dhist[p] = new RooDataHist{Form("dh%d", p), Form("dh%d", p),
+                                 RooArgSet{evis, z}, hmu_bkg_templ};
+  }
 
   // pdf of evis,z from histograms
   RooHistPdf* pdf[n_params + 1];

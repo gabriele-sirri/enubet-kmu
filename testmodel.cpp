@@ -95,12 +95,24 @@ int testmodel(RooWorkspace& w)
   model->plotOn(evis_frame_pref);
 
   RooArgSet pdf_set;
-  for (auto p = 0; p < n_pdf; p++) {
+  // draw backgrouund first
+  pdf_set.add(*((RooHistPdf*) pdf_list.find(
+      Form("pdf%d", n_pdf - 1))));  // in order to draw stacked
+
+  model->plotOn(evis_frame_pref, RooFit::Components(pdf_set),
+                RooFit::FillColor(1), RooFit::FillStyle(3005), RooFit::VLines(),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+  model->plotOn(evis_frame_pref, RooFit::Components(pdf_set),
+                RooFit::FillColor(10), RooFit::Name("filled"),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+
+  // draw signal
+  for (auto p = 0; p < n_pdf - 1; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(evis_frame_pref, RooFit::Components(pdf_set),
-                  RooFit::LineStyle(kDotted), RooFit::FillColor(p + 40),
-                  RooFit::DrawOption("F"), RooFit::MoveToBack());
+                  RooFit::FillColor(p + 40), RooFit::DrawOption("F"),
+                  RooFit::MoveToBack());
   }
 
   // z var
@@ -111,12 +123,22 @@ int testmodel(RooWorkspace& w)
   model->plotOn(z_frame_pref);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < n_pdf; p++) {
+  pdf_set.add(*((RooHistPdf*) pdf_list.find(
+      Form("pdf%d", n_pdf - 1))));  // in order to draw stacked
+
+  model->plotOn(z_frame_pref, RooFit::Components(pdf_set), RooFit::FillColor(1),
+                RooFit::FillStyle(3005), RooFit::DrawOption("F"),
+                RooFit::MoveToBack());
+  model->plotOn(z_frame_pref, RooFit::Components(pdf_set),
+                RooFit::FillColor(10), RooFit::Name("filled"),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+
+  for (auto p = 0; p < n_pdf - 1; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(z_frame_pref, RooFit::Components(pdf_set),
-                  RooFit::LineStyle(kDotted), RooFit::FillColor(p + 40),
-                  RooFit::DrawOption("F"), RooFit::MoveToBack());
+                  RooFit::FillColor(p + 40), RooFit::DrawOption("F"),
+                  RooFit::MoveToBack());
   }
 
   // parameters mean values: needed for constraint
@@ -150,12 +172,22 @@ int testmodel(RooWorkspace& w)
   model->plotOn(evis_frame_postf);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < n_pdf; p++) {
+  pdf_set.add(*((RooHistPdf*) pdf_list.find(
+      Form("pdf%d", n_pdf - 1))));  // in order to draw stacked
+
+  model->plotOn(evis_frame_postf, RooFit::Components(pdf_set),
+                RooFit::FillColor(1), RooFit::FillStyle(3005),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+  model->plotOn(evis_frame_postf, RooFit::Components(pdf_set),
+                RooFit::FillColor(10), RooFit::Name("filled"),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+
+  for (auto p = 0; p < n_pdf - 1; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(evis_frame_postf, RooFit::Components(pdf_set),
-                  RooFit::LineStyle(kDotted), RooFit::FillColor(p + 40),
-                  RooFit::DrawOption("F"), RooFit::MoveToBack());
+                  RooFit::FillColor(p + 40), RooFit::DrawOption("F"),
+                  RooFit::MoveToBack());
   }
 
   // z var
@@ -166,12 +198,22 @@ int testmodel(RooWorkspace& w)
   model->plotOn(z_frame_postf);
 
   pdf_set.removeAll();
-  for (auto p = 0; p < n_pdf; p++) {
+  pdf_set.add(*((RooHistPdf*) pdf_list.find(
+      Form("pdf%d", n_pdf - 1))));  // in order to draw stacked
+
+  model->plotOn(z_frame_postf, RooFit::Components(pdf_set),
+                RooFit::FillColor(1), RooFit::FillStyle(3005),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+  model->plotOn(z_frame_postf, RooFit::Components(pdf_set),
+                RooFit::FillColor(10), RooFit::Name("filled"),
+                RooFit::DrawOption("F"), RooFit::MoveToBack());
+
+  for (auto p = 0; p < n_pdf - 1; p++) {
     pdf_set.add(*((RooHistPdf*) pdf_list.find(
         Form("pdf%d", p))));  // in order to draw stacked
     model->plotOn(z_frame_postf, RooFit::Components(pdf_set),
-                  RooFit::LineStyle(kDotted), RooFit::FillColor(p + 40),
-                  RooFit::DrawOption("F"), RooFit::MoveToBack());
+                  RooFit::FillColor(p + 40), RooFit::DrawOption("F"),
+                  RooFit::MoveToBack());
   }
 
   // Draw frame on canvas
