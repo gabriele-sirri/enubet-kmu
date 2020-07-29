@@ -46,7 +46,24 @@ int testmodel(RooWorkspace& w)
   // covariance matrix) and from this the actual b coefficients true value
   double sigma_b = 0.2;
   TMatrixDSym Vf(n_params);
-  TVectorD b_coef = getTrueWeights(n_params, sigma_b, f, Vf);
+  TVectorD b_coef(n_params);
+
+  // need to ensure that sum of fractions is less than 1
+  int n_trial(1);
+  double sum_f(0);
+  bool condition(false);
+  while (!condition) {
+    cout << "Get b-coefficients: trial = " << n_trial << endl;
+
+    b_coef = getTrueWeights(n_params, sigma_b, f, Vf);
+
+    for (auto p = 0; p < n_params; p++) sum_f += b_coef[p] * vf_in[p];
+
+    if (sum_f < 1.) condition = true;
+
+    sum_f = 0;
+    n_trial++;
+  }
 
   // print b coefficients true values
   cout << " ========== b-coefficients true values =========" << endl;
