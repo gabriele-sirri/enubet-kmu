@@ -72,62 +72,66 @@ int makemodel(string filepath)
   RooDataHist* dhist[n_params];
 
   for (auto p = 0; p < n_params; p++) {
-
-		hmu_sgn_templ[p] -> Scale(1./hmu_sgn_templ[p] -> Integral());
+    hmu_sgn_templ[p]->Scale(1. / hmu_sgn_templ[p]->Integral());
 
     dhist[p] = new RooDataHist{Form("dh%d", p), Form("dh%d", p),
                                RooArgSet{evis, z}, hmu_sgn_templ[p]};
   }
 
-  // signal pdfs from RooDataHist 
+  // signal pdfs from RooDataHist
   RooHistPdf* pdf[n_params];
 
-  //for (auto p = 0; p < n_params + 1; p++)
+  // for (auto p = 0; p < n_params + 1; p++)
   for (auto p = 0; p < n_params; p++)
     pdf[p] = new RooHistPdf{Form("pdf%d", p), Form("pdf%d", p),
                             RooArgSet{evis, z}, *dhist[p]};
 
-	// background pdf: model shape systematic
-	//
-	// nominal value
-	TH2F* hmu_bkg_nom = (TH2F*) hmu_bkg_templ -> Clone("hmu_bkg_nom");
-	hmu_bkg_nom -> Scale(1./hmu_bkg_nom->Integral());
-	RooDataHist dh_mu_bkg_nom{"dh_mu_bkg_nom", "dh_mu_bkg_nom", RooArgSet{evis, z}, hmu_bkg_nom};
-	RooHistPdf bkg_0("bkg_0", "bkg_0", RooArgSet{evis, z}, dh_mu_bkg_nom);
-	//
-	// bkg +1 sigma
-	TH2F* hmu_bkg_p;
+  // background pdf: model shape systematic
+  //
+  // nominal value
+  TH2F* hmu_bkg_nom = (TH2F*)hmu_bkg_templ->Clone("hmu_bkg_nom");
+  hmu_bkg_nom->Scale(1. / hmu_bkg_nom->Integral());
+  RooDataHist dh_mu_bkg_nom{"dh_mu_bkg_nom", "dh_mu_bkg_nom",
+                            RooArgSet{evis, z}, hmu_bkg_nom};
+  RooHistPdf bkg_0("bkg_0", "bkg_0", RooArgSet{evis, z}, dh_mu_bkg_nom);
+  //
+  // bkg +1 sigma
+  TH2F* hmu_bkg_p;
   inputFile->GetObject("hMu_bkg_p_templ", hmu_bkg_p);
-	hmu_bkg_p -> Scale(1./hmu_bkg_p->Integral());
-	RooDataHist dh_mu_bkg_p{"dh_mu_bkg_p", "dh_mu_bkg_p", RooArgSet{evis, z}, hmu_bkg_p};
-	RooHistPdf bkg_p("bkg_p", "bkg_p", RooArgSet{evis, z}, dh_mu_bkg_p);
-	//
-	// bkg -1 sigma
-	TH2F* hmu_bkg_m;
+  hmu_bkg_p->Scale(1. / hmu_bkg_p->Integral());
+  RooDataHist dh_mu_bkg_p{"dh_mu_bkg_p", "dh_mu_bkg_p", RooArgSet{evis, z},
+                          hmu_bkg_p};
+  RooHistPdf bkg_p("bkg_p", "bkg_p", RooArgSet{evis, z}, dh_mu_bkg_p);
+  //
+  // bkg -1 sigma
+  TH2F* hmu_bkg_m;
   inputFile->GetObject("hMu_bkg_m_templ", hmu_bkg_m);
-	hmu_bkg_m -> Scale(1./hmu_bkg_m->Integral());
-	RooDataHist dh_mu_bkg_m{"dh_mu_bkg_m", "dh_mu_bkg_m", RooArgSet{evis, z}, hmu_bkg_m};
-	RooHistPdf bkg_m("bkg_m", "bkg_m", RooArgSet{evis, z}, dh_mu_bkg_m);
-	//
-	// build interpolation between -1 -> +1 sigma
-	RooRealVar alpha{"alpha", "alpha bkg sys", 0, -5, 5};
-	PiecewiseInterpolation bkg_sys("bkg_sys", "bkg_sys", bkg_0, bkg_m, bkg_p, alpha);
+  hmu_bkg_m->Scale(1. / hmu_bkg_m->Integral());
+  RooDataHist dh_mu_bkg_m{"dh_mu_bkg_m", "dh_mu_bkg_m", RooArgSet{evis, z},
+                          hmu_bkg_m};
+  RooHistPdf bkg_m("bkg_m", "bkg_m", RooArgSet{evis, z}, dh_mu_bkg_m);
+  //
+  // build interpolation between -1 -> +1 sigma
+  RooRealVar alpha{"alpha", "alpha bkg sys", 0, -5, 5};
+  PiecewiseInterpolation bkg_sys("bkg_sys", "bkg_sys", bkg_0, bkg_m, bkg_p,
+                                 alpha);
 
-	// constrain alpha
-	RooGaussian gaus_alpha("gaus_alpha", "gaus_alpha", alpha, RooFit::RooConst(0), RooFit::RooConst(1));
+  // constrain alpha
+  RooGaussian gaus_alpha("gaus_alpha", "gaus_alpha", alpha, RooFit::RooConst(0),
+                         RooFit::RooConst(1));
 
-	// assemble all components to fnal model
+  // assemble all components to fnal model
   RooArgList pdflist;
   for (auto p = 0; p < n_params; p++) pdflist.add(*pdf[p]);
 
-	pdflist.add(bkg_sys);
+  pdflist.add(bkg_sys);
 
   RooArgList parlist;
   for (auto p = 0; p < n_params; p++) parlist.add(*f[p]);
 
   // define the model (not extended)
   RooRealSumPdf sb{"sb", "sb", pdflist, parlist};
-	RooProdPdf model{"model", "model", sb, gaus_alpha};
+  RooProdPdf model{"model", "model", sb, gaus_alpha};
 
   //
   RooWorkspace w{"w", "w"};
@@ -137,8 +141,8 @@ int makemodel(string filepath)
   w.writeToFile("model.root");
 
   for (auto p = 0; p < n_params; p++) {
-		delete f[p];
-  	delete pdf[p];
+    delete f[p];
+    delete pdf[p];
     delete dhist[p];
   }
 
